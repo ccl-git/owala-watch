@@ -1,0 +1,36 @@
+name: owala-watch
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes (GitHub may delay scheduled runs)
+  workflow_dispatch:         # allow manual "Run workflow" button
+
+permissions:
+  contents: write            # needed to commit state.json
+
+concurrency:
+  group: owala-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check stock
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          STATE_FILE: state.json
+        run: python3 owala_watch.py --once --color "無人島"
+
+      - name: Save state if changed
+        run: |
+          if [ -n "$(git status --porcelain state.json)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add state.json
+            git commit -m "Update stock state"
+            git push
+          fi
