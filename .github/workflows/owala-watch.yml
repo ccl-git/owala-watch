@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "*/5 * * * *"   # every 5 minutes (GitHub may delay scheduled runs)
   workflow_dispatch:         # allow manual "Run workflow" button
+    inputs:
+      test_notify:
+        description: "Send a test push notification instead of checking stock"
+        type: boolean
+        default: false
 
 permissions:
   contents: write            # needed to commit state.json
@@ -19,7 +24,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Send test notification
+        if: ${{ inputs.test_notify }}
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python3 owala_watch.py --test-notify
+
       - name: Check stock
+        if: ${{ !inputs.test_notify }}
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           STATE_FILE: state.json
