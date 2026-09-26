@@ -108,36 +108,44 @@ def save_state(state):
 
 def check(args):
     product = parse_product(fetch_html(args.url))
-    v = find_variation(product, args.color)
-    if v is None:
-        names = ", ".join(variation_name(x) for x in product.get("variations", []))
-        raise ValueError(f"Color '{args.color}' not found. Available: {names}")
+    if args.color.strip().lower() in ("all", "*"):
+        targets = product.get("variations", [])
+    else:
+        v = find_variation(product, args.color)
+        if v is None:
+            names = ", ".join(variation_name(x) for x in product.get("variations", []))
+            raise ValueError(f"Color '{args.color}' not found. Available: {names}")
+        targets = [v]
 
-    avail = is_available(product, v)
-    qty = v.get("quantity")
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{ts}] {variation_name(v)}: quantity={qty} available={avail}", flush=True)
-
     state = load_state()
-    key = f"{args.url}#{v.get('key')}"
-    was_avail = state.get(key, False)
-    if avail and not was_avail:
-        title = "Owala restocked!"
-        msg = f"{variation_name(v)} is in stock (qty {qty}). Go buy it now!"
-        notify(args.topic, title, msg, click_url=args.url)
-        print(f"[{ts}] Notification sent to ntfy topic '{args.topic}'", flush=True)
-    elif not avail and was_avail and args.notify_soldout:
-        notify(args.topic, "Owala sold out again", f"{variation_name(v)} is sold out.",
-               click_url=args.url, priority="default")
-    state[key] = avail
+    restocked = []
+    for v in targets:
+        avail = is_available(product, v)
+        qty = v.get("quantity")
+        print(f"[{ts}] {variation_name(v)}: quantity={qty} available={avail}", flush=True)
+        key = f"{args.url}#{v.get('key')}"
+        was_avail = state.get(key, False)
+        if avail and not was_avail:
+            restocked.append(f"{variation_name(v)} (qty {qty})")
+        elif not avail and was_avail and args.notify_soldout:
+            notify(args.topic, "Owala sold out again", f"{variation_name(v)} is sold out.",
+                   click_url=args.url, priority="default")
+        state[key] = avail
+
+    if restocked:
+        # One notification listing every color that just came back in stock
+        msg = "In stock now: " + ", ".join(restocked) + ". Go buy it now!"
+        notify(args.topic, "Owala restocked!", msg, click_url=args.url)
+        print(f"[{ts}] Notification sent: {msg}", flush=True)
     save_state(state)
-    return avail
+    return bool(restocked)
 
 
 def main():
     ap = argparse.ArgumentParser(description="Watch a Finders (Shopline) product color for restock.")
     ap.add_argument("--url", default=DEFAULT_URL, help="Product page URL")
-    ap.add_argument("--color", default=DEFAULT_COLOR, help="Color name (zh-hant or en) or variation key")
+    ap.add_argument("--color", default=DEFAULT_COLOR, help="Color name (zh-hant or en), variation key, or 'all' for every color")
     ap.add_argument("--topic", default=os.environ.get("NTFY_TOPIC"),
                     help="ntfy topic name (or set NTFY_TOPIC env var)")
     ap.add_argument("--interval", type=int, default=120, help="Seconds between checks in loop mode")

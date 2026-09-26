@@ -35,7 +35,7 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           STATE_FILE: state.json
-        run: python3 owala_watch.py --once --color "無人島"
+        run: python3 owala_watch.py --once --color all
 
       - name: Save state if changed
         run: |
